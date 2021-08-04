@@ -6,4 +6,4 @@ Currently supports Telegram only
 - [AHK Required](https://autohotkey.com/download/)
 
 ----
-Icon Grinding Gear Games Ltd. Rights reserved.
+ICON @ Grinding Gear Games Ltd. Rights reserved.
