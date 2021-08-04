@@ -158,16 +158,16 @@ CheckConfig()
 		GAME_CLIENT_LOG_PATH := input
 	}
 
-	if (GAME_CLIENT_LOG_LIMIT_SIZE == -1)
+	if (GAME_CLIENT_LOG_LIMIT_SIZE == -1 || GAME_CLIENT_LOG_LIMIT_SIZE < 3072000 || GAME_CLIENT_LOG_LIMIT_SIZE > 3072000000)
 	{
-		InputBox, input, % NAME, Set Path of Exile Client Log File Max Size (Kilobyte)`n`nDefault: 5120 (5 MB)`nMin: 3072 (3 MB), , 460, 200
+		InputBox, input, % NAME, Set Path of Exile Client Log File Max Size (Kilobyte)`n`nDefault: 5120 (5 MB)`nMin: 3072 (3 MB)`nMax: 30720 (30 MB), , 460, 200
 		if (ErrorLevel > 0)
 			ExitApp
 		else
 		{
-			if (input < 3072)
+			if (input < 3072 || input > 30720)
 			{
-				MsgBox, 4144, % NAME, You can't set lower than 3072 Kilobytes (3 MB)
+				MsgBox, 4144, % NAME, You have to set value between 3072 ~ 30720 (3 MB ~ 30 MB)
 				CheckConfig()
 				Return
 			}
@@ -233,7 +233,7 @@ CheckConfig()
 
 About()
 {
-	MsgBox, 4160, % NAME, Path of Exile Whisper Notification %VERSION%`n`nby. Lua
+	MsgBox, 4160, % NAME, %VERSION%`n`nby. Lua`nhttps://github.com/Lua-kr/POE-Whisper-Notification
 }
 
 CloseApp(ExitReason, ExitCode)
