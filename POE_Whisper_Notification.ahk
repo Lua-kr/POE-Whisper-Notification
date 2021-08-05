@@ -8,7 +8,7 @@ FileEncoding, UTF-8
 OnExit("CloseApp")
 
 global NAME := "Path Of Exile Whisper Notification"
-global VERSION := "v1.0"
+global VERSION := "v1.1"
 
 Menu, Tray, NoStandard
 if ( !A_IsCompiled && FileExist(A_ScriptDir "/icon.ico") )
@@ -78,6 +78,8 @@ LogWatcher()
 		RegExReplace(logFileText, "(\R)",, logFileLastLine)
 		if (logFileLastLine > 0)
 		{
+			if (InStr(logFileLine, "@To"))
+				logFileLastLine -= 1
 			FileReadLine, logFileLine, % GAME_CLIENT_LOG_PATH, logFileLastLine
 			textPos := InStr(logFileLine, "@")
 			if (textPos > 0)
