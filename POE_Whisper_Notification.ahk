@@ -173,7 +173,8 @@ CheckConfig()
 			}
 		}
 		IniWrite, % input*1000, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
-		GAME_CLIENT_LOG_LIMIT_SIZE := input
+		GAME_CLIENT_LOG_LIMIT_SIZE := input*1000
+		MsgBox, % GAME_CLIENT_LOG_LIMIT_SIZE
 	}
 
 	if (GAME_CLIENT_LOG_BACKUP == -1)
