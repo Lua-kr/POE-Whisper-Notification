@@ -5,15 +5,14 @@
 SetBatchLines -1
 DetectHiddenWindows, Off
 FileEncoding, UTF-8
-OnExit("CloseApp")
 
-global NAME := "Path Of Exile Whisper Notification"
-global VERSION := "v1.1"
+global NAME := "Path of Exile Whisper Notification"
+global VERSION := "v1.2"
 
 Menu, Tray, NoStandard
 if ( !A_IsCompiled && FileExist(A_ScriptDir "/icon.ico") )
 	Menu, Tray, Icon, %A_ScriptDir%/icon.ico
-Menu,Tray,Tip,POE Whisper Notification
+Menu,Tray,Tip, % NAME
 Menu,Tray,Icon
 Menu, Tray, Add, About
 Menu, Tray, Add, Exit, CloseApp
@@ -22,29 +21,36 @@ Menu, Tray, Default, About
 
 if (!FileExist(A_ScriptDir "/config.ini"))
 {
-	IniWrite, -1, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
-	IniWrite, -1, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
-	IniWrite, -1, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_BACKUP
-	IniWrite, -1, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_BOT_TOKEN
-	IniWrite, -1, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_CHAT_ROOM_ID
-	IniWrite, -1, %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
+	IniWrite, "", %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
+	IniWrite, "", %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
+	IniWrite, "", %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_BACKUP
+	IniWrite, "", %A_ScriptDir%/config.ini, Telegram, TELEGRAM_BOT_TOKEN
+	IniWrite, "", %A_ScriptDir%/config.ini, Telegram, TELEGRAM_CHAT_ROOM_ID
+	IniWrite, "", %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
+	IniWrite, "", %A_ScriptDir%/config.ini, Config, NOTIFICATION_AFK_ONLY
 }
 
-global SendTelegramMessage_CHECK := false
 global GAME_CLIENT_LOG_PATH
 global GAME_CLIENT_LOG_LIMIT_SIZE
 global GAME_CLIENT_LOG_BACKUP
 global TELEGRAM_BOT_TOKEN
 global TELEGRAM_CHAT_ROOM_ID
 global NOTIFICATION_ALL_WHISPERS
+global NOTIFICATION_AFK_ONLY
 IniRead, GAME_CLIENT_LOG_PATH, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
 IniRead, GAME_CLIENT_LOG_LIMIT_SIZE, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
 IniRead, GAME_CLIENT_LOG_BACKUP, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_BACKUP
 IniRead, TELEGRAM_BOT_TOKEN, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_BOT_TOKEN
 IniRead, TELEGRAM_CHAT_ROOM_ID, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_CHAT_ROOM_ID
 IniRead, NOTIFICATION_ALL_WHISPERS, %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
+IniRead, NOTIFICATION_AFK_ONLY, %A_ScriptDir%/config.ini, Config, NOTIFICATION_AFK_ONLY
 
 CheckConfig()
+
+global logLastCheckedLine := 0
+global isPlayerAFK := false
+global SendTelegramMessage_CHECK := false
+
 Main()
 
 Main()
@@ -54,7 +60,10 @@ Main()
 		MsgBox, 4144, % NAME, Couldn't find Path of Exile Client Log File:`n%GAME_CLIENT_LOG_PATH%
 		ExitApp
 	}
-	SendTelegramMessage(NAME . " - Started")
+	FileRead, logFileText, % GAME_CLIENT_LOG_PATH
+	RegExReplace(logFileText, "(\R)",, logLastCheckedLine)
+	logFileText := "" ;Free memory
+	SendTelegramMessage(NAME . " " . VERSION . " - Started")
 	TrayTip, % NAME, Started, 3, 1
 	SetTimer, LogWatcher, 100
 	Return
@@ -76,20 +85,33 @@ LogWatcher()
 
 		FileRead, logFileText, % GAME_CLIENT_LOG_PATH
 		RegExReplace(logFileText, "(\R)",, logFileLastLine)
-		if (logFileLastLine > 0)
+		logFileText := "" ;Free memory
+		if (logFileLastLine > logLastCheckedLine)
 		{
-			if (InStr(logFileLine, "@To"))
-				logFileLastLine -= 1
-			FileReadLine, logFileLine, % GAME_CLIENT_LOG_PATH, logFileLastLine
-			textPos := InStr(logFileLine, "@")
-			if (textPos > 0)
+			Loop
 			{
-				whisperText := SubStr(logFileLine, textPos+6)
-				if (NOTIFICATION_ALL_WHISPERS || IsTradingWhisper(whisperText))
-					SendTelegramMessage(whisperText)
+				logFileLine := ""
+				logLastCheckedLine++
+				FileReadLine, logFileLine, % GAME_CLIENT_LOG_PATH, logLastCheckedLine
+				textPos := InStr(logFileLine, "@From")
+				if (textPos > 0)
+				{
+					if (!NOTIFICATION_AFK_ONLY || (NOTIFICATION_AFK_ONLY && isPlayerAFK) )
+					{
+						whisperText := SubStr(logFileLine, textPos+6)
+						if (NOTIFICATION_ALL_WHISPERS || IsTradingWhisper(whisperText))
+							SendTelegramMessage(whisperText)
+					}
+				}
+				else if (InStr(logFileLine, " : ")) ; detect afk mode
+				{
+					IsAFKMode(logFileLine)
+				}
+
+				if (logLastCheckedLine == logFileLastLine)
+					break
 			}
 		}
-		logFileText := "" ;Free memory
 
 		if (logFileSize >= GAME_CLIENT_LOG_LIMIT_SIZE)
 		{
@@ -112,6 +134,7 @@ LogFileNuke()
 	{
 		logFile.write()
 		logFile.close()
+		logLastCheckedLine := 0
 	}
 }
 
@@ -131,8 +154,8 @@ SendTelegramMessage(msg)
 	if (InStr(logFile, """ok"":false") > 0)
 	{
 		MsgBox, 4144, % NAME, Failed to send telegram message, Check telegram configs`n`nBOT TOKEN: %TELEGRAM_BOT_TOKEN%`nCHAT ID: %TELEGRAM_CHAT_ROOM_ID%
-		TELEGRAM_BOT_TOKEN := -1
-		TELEGRAM_CHAT_ROOM_ID := -1
+		TELEGRAM_BOT_TOKEN := ""
+		TELEGRAM_CHAT_ROOM_ID := ""
 		CheckConfig()
 		SendTelegramMessage(msg)
 		Return
@@ -143,7 +166,7 @@ SendTelegramMessage(msg)
 
 CheckConfig()
 {
-	if (GAME_CLIENT_LOG_PATH == -1)
+	if (GAME_CLIENT_LOG_PATH == "" || GAME_CLIENT_LOG_PATH == "ERROR")
 	{
 		InputBox, input, % NAME, Set your Path of Exile Client Log File Path, , 460, 160
 		if (ErrorLevel > 0)
@@ -160,9 +183,9 @@ CheckConfig()
 		GAME_CLIENT_LOG_PATH := input
 	}
 
-	if (GAME_CLIENT_LOG_LIMIT_SIZE == -1 || GAME_CLIENT_LOG_LIMIT_SIZE < 3072000 || GAME_CLIENT_LOG_LIMIT_SIZE > 3072000000)
+	if (GAME_CLIENT_LOG_LIMIT_SIZE == "" || GAME_CLIENT_LOG_LIMIT_SIZE == "ERROR" || GAME_CLIENT_LOG_LIMIT_SIZE < 3072000 || GAME_CLIENT_LOG_LIMIT_SIZE > 3072000000)
 	{
-		InputBox, input, % NAME, Set Path of Exile Client Log File Max Size (Kilobyte)`n`nDefault: 5120 (5 MB)`nMin: 3072 (3 MB)`nMax: 30720 (30 MB), , 460, 200
+		InputBox, input, % NAME, Set Path of Exile Client Log Max File Size (Kilobyte)`n`nDefault: 5120 (5 MB)`nMin: 3072 (3 MB)`nMax: 30720 (30 MB), , 460, 200
 		if (ErrorLevel > 0)
 			ExitApp
 		else
@@ -178,9 +201,9 @@ CheckConfig()
 		GAME_CLIENT_LOG_LIMIT_SIZE := input*1000
 	}
 
-	if (GAME_CLIENT_LOG_BACKUP == -1)
+	if (GAME_CLIENT_LOG_BACKUP == "" || GAME_CLIENT_LOG_BACKUP == "ERROR")
 	{
-		InputBox, input, % NAME, Set Path of Exile Client Log File Backup`n`n1 = ENABLE (Rename and Backup the log file when limit size reached)`n0 = DISABLE (Wipe the log file when limit size reached), , 460, 200
+		InputBox, input, % NAME, Set Path of Exile Client Log File Backup`n`n1 = Enable (Rename and Backup the log file when limit size reached)`n0 = Disable (Wipe the log file when limit size reached), , 460, 200
 		if (ErrorLevel > 0)
 			ExitApp
 		else
@@ -196,7 +219,7 @@ CheckConfig()
 		GAME_CLIENT_LOG_BACKUP := input
 	}
 
-	if (TELEGRAM_BOT_TOKEN == -1)
+	if (TELEGRAM_BOT_TOKEN == "" || TELEGRAM_BOT_TOKEN == "ERROR")
 	{
 		InputBox, input, % NAME, Set your Telegram Bot Token, , 460, 160
 		if (ErrorLevel > 0)
@@ -205,7 +228,7 @@ CheckConfig()
 		TELEGRAM_BOT_TOKEN := input
 	}
 
-	if (TELEGRAM_CHAT_ROOM_ID == -1)
+	if (TELEGRAM_CHAT_ROOM_ID == "" || TELEGRAM_CHAT_ROOM_ID == "ERROR")
 	{
 		InputBox, input, % NAME, Set your Telegram Chat Room ID, , 460, 160
 		if (ErrorLevel > 0)
@@ -214,7 +237,7 @@ CheckConfig()
 		TELEGRAM_CHAT_ROOM_ID := input
 	}
 
-	if (NOTIFICATION_ALL_WHISPERS == -1)
+	if (NOTIFICATION_ALL_WHISPERS == "" || NOTIFICATION_ALL_WHISPERS == "ERROR")
 	{
 		InputBox, input, % NAME, Set notification when you recived whispers`n`n1 = All (Send notification all whispers)`n0 = Trade Only (Send notification only trading whispers), , 460, 200
 		if (ErrorLevel > 0)
@@ -231,6 +254,24 @@ CheckConfig()
 		IniWrite, %input%, %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
 		NOTIFICATION_ALL_WHISPERS := input
 	}
+
+	if (NOTIFICATION_AFK_ONLY == "" || NOTIFICATION_AFK_ONLY == "ERROR")
+	{
+		InputBox, input, % NAME, Set notification when you recived whispers while AFK Mode is ON`n`n1 = Enable`n0 = Disable, , 460, 200
+		if (ErrorLevel > 0)
+			ExitApp
+		else
+		{
+			if (input != 0 && input != 1)
+			{
+				MsgBox, 4144, % NAME, You have to set 0 or 1 for this config
+				CheckConfig()
+				Return
+			}
+		}
+		IniWrite, %input%, %A_ScriptDir%/config.ini, Config, NOTIFICATION_AFK_ONLY
+		NOTIFICATION_AFK_ONLY := input
+	}
 }
 
 About()
@@ -241,7 +282,7 @@ About()
 CloseApp(ExitReason, ExitCode)
 {
 	if (SendTelegramMessage_CHECK)
-		SendTelegramMessage(NAME . " - Stopped")
+		SendTelegramMessage(NAME . " " . VERSION . " - Stopped")
 
 	ExitApp
 }
@@ -277,8 +318,9 @@ StrPutVar(Str, ByRef Var, Enc = "")
 }
 
 ; Function by POE-Trades-Companion
-; https://github.com/lemasato/POE-Trades-Companion/blob/dev/lib/Game.ahk
-IsTradingWhisper(str) {
+; https://github.com/lemasato/POE-Trades-Companion
+IsTradingWhisper(str)
+{
 	; Make sure it doesnt contain line break
 	if (InStr(str, "`n") > 0)
 		Return False
@@ -325,4 +367,57 @@ IsTradingWhisper(str) {
 	}
 
 	Return False
+}
+
+IsAFKMode(str)
+{
+	static ENG_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : AFK mode is now ON.*") 
+	static ENG_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : AFK mode is now OFF.*") 
+
+	static FRE_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : Le mode Absent \(AFK\) est désormais activé.*") 
+	static FRE_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : Le mode Absent \(AFK\) est désactivé.*") 
+
+	static GER_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : AFK-Modus ist nun AN.*") 
+	static GER_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : AFK-Modus ist nun AUS.*") 
+
+	static POR_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : Modo LDT Ativado.*") 
+	static POR_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : Modo LDT Desativado.*") 
+
+	static RUS_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : Режим ""отошёл"" включён.*") 
+	static RUS_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : Режим ""отошёл"" выключен.*") 
+
+	static THA_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : เปิดโหมด AFK แล้ว.*") 
+	static THA_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : ปิดโหมด AFK แล้ว.*") 
+
+	static SPA_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : El modo Ausente está habilitado.*") 
+	static SPA_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : El modo Ausente está deshabilitado.*")
+
+	static KOR_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : 자리 비움 모드를 설정했습니다.*") 
+	static KOR_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : 자리 비움 모드를 해제했습니다.*")
+
+    static TWN_afkOnRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : 暫離模式啟動.*")
+    static TWN_afkOffRegexStr := ("^(?:[^ ]+ ){6}(\d+)\] : 暫離模式關閉.*")
+
+	allAfkOnRegEx := [ENG_afkOnRegexStr, FRE_afkOnRegexStr, GER_afkOnRegexStr, POR_afkOnRegexStr
+		, RUS_afkOnRegexStr, THA_afkOnRegexStr, SPA_afkOnRegexStr, KOR_afkOnRegexStr, TWN_afkOnRegexStr]
+	allAfkOffRegEx := [ENG_afkOffRegexStr, FRE_afkOffRegexStr, GER_afkOffRegexStr, POR_afkOffRegexStr
+		, RUS_afkOffRegexStr, THA_afkOffRegexStr, SPA_afkOffRegexStr, KOR_afkOffRegexStr, TWN_afkOffRegexStr]
+
+	; Check if afk mode
+	for index, regexStr in allAfkOnRegEx
+	{
+		if RegExMatch(str, "iSO)" regexStr)
+		{
+			isPlayerAFK := true
+			Return
+		}
+	}
+	for index, regexStr in allAfkOffRegEx
+	{
+		if RegExMatch(str, "iSO)" regexStr)
+		{
+			isPlayerAFK := false
+			Return
+		}
+	}
 }
