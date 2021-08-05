@@ -78,7 +78,7 @@ LogWatcher()
 		RegExReplace(logFileText, "(\R)",, logFileLastLine)
 		if (logFileLastLine > 0)
 		{
-			FileReadLine, logFileLine, % GAME_CLIENT_LOG_PATH, logFileLastLine+1
+			FileReadLine, logFileLine, % GAME_CLIENT_LOG_PATH, logFileLastLine
 			textPos := InStr(logFileLine, "@")
 			if (textPos > 0)
 			{
