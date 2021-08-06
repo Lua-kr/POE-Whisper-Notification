@@ -103,7 +103,7 @@ LogWatcher()
 				textPos := InStr(logFileLine, "@From")
 				if (textPos > 0)
 				{
-					if (!NOTIFICATION_AFK_ONLY || (NOTIFICATION_AFK_ONLY && isPlayerAFK) )
+					if (!NOTIFICATION_AFK_ONLY || isPlayerAFK)
 					{
 						whisperText := SubStr(logFileLine, textPos+6)
 						if (NOTIFICATION_ALL_WHISPERS || IsTradingWhisper(whisperText))
