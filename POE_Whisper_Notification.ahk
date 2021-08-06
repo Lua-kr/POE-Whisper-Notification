@@ -8,7 +8,7 @@ FileEncoding, UTF-8
 OnExit("CloseApp")
 
 global NAME := "Path of Exile Whisper Notification"
-global VERSION := "v1.3a"
+global VERSION := "v1.3b"
 
 Menu, Tray, NoStandard
 if ( !A_IsCompiled && FileExist(A_ScriptDir "/icon.ico") )
@@ -136,12 +136,16 @@ LogWatcher()
 
 LogFileNuke()
 {
-	logFile := FileOpen(GAME_CLIENT_LOG_PATH, "w")
-	if (ErrorLevel == 0)
+	FileGetSize, logFileSize, % GAME_CLIENT_LOG_PATH
+	if (ErrorLevel == 0 && logFileSize >= GAME_CLIENT_LOG_LIMIT_SIZE) ; Double check to avoid multiple copy by timer
 	{
-		logFile.write()
-		logFile.close()
-		logLastCheckedLine := 0
+		logFile := FileOpen(GAME_CLIENT_LOG_PATH, "w")
+		if (ErrorLevel == 0)
+		{
+			logFile.write()
+			logFile.close()
+			logLastCheckedLine := 0
+		}
 	}
 }
 
