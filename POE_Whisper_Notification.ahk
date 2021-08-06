@@ -8,7 +8,7 @@ FileEncoding, UTF-8
 OnExit("CloseApp")
 
 global NAME := "Path of Exile Whisper Notification"
-global VERSION := "v1.3"
+global VERSION := "v1.3a"
 
 Menu, Tray, NoStandard
 if ( !A_IsCompiled && FileExist(A_ScriptDir "/icon.ico") )
@@ -20,17 +20,6 @@ Menu, Tray, Add, Exit, CloseApp
 Menu, Tray, Default, About
 
 
-if (!FileExist(A_ScriptDir "/config.ini"))
-{
-	IniWrite, "", %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
-	IniWrite, "", %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
-	IniWrite, "", %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_BACKUP
-	IniWrite, "", %A_ScriptDir%/config.ini, Telegram, TELEGRAM_BOT_TOKEN
-	IniWrite, "", %A_ScriptDir%/config.ini, Telegram, TELEGRAM_CHAT_ROOM_ID
-	IniWrite, "", %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
-	IniWrite, "", %A_ScriptDir%/config.ini, Config, NOTIFICATION_AFK_ONLY
-}
-
 global GAME_CLIENT_LOG_PATH
 global GAME_CLIENT_LOG_LIMIT_SIZE
 global GAME_CLIENT_LOG_BACKUP
@@ -38,13 +27,27 @@ global TELEGRAM_BOT_TOKEN
 global TELEGRAM_CHAT_ROOM_ID
 global NOTIFICATION_ALL_WHISPERS
 global NOTIFICATION_AFK_ONLY
-IniRead, GAME_CLIENT_LOG_PATH, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
-IniRead, GAME_CLIENT_LOG_LIMIT_SIZE, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
-IniRead, GAME_CLIENT_LOG_BACKUP, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_BACKUP
-IniRead, TELEGRAM_BOT_TOKEN, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_BOT_TOKEN
-IniRead, TELEGRAM_CHAT_ROOM_ID, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_CHAT_ROOM_ID
-IniRead, NOTIFICATION_ALL_WHISPERS, %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
-IniRead, NOTIFICATION_AFK_ONLY, %A_ScriptDir%/config.ini, Config, NOTIFICATION_AFK_ONLY
+
+if (!FileExist(A_ScriptDir "/config.ini"))
+{
+	IniWrite, %A_Space%, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
+	IniWrite, %A_Space%, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
+	IniWrite, %A_Space%, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_BACKUP
+	IniWrite, %A_Space%, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_BOT_TOKEN
+	IniWrite, %A_Space%, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_CHAT_ROOM_ID
+	IniWrite, %A_Space%, %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
+	IniWrite, %A_Space%, %A_ScriptDir%/config.ini, Config, NOTIFICATION_AFK_ONLY
+}
+else
+{
+	IniRead, GAME_CLIENT_LOG_PATH, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
+	IniRead, GAME_CLIENT_LOG_LIMIT_SIZE, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
+	IniRead, GAME_CLIENT_LOG_BACKUP, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_BACKUP
+	IniRead, TELEGRAM_BOT_TOKEN, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_BOT_TOKEN
+	IniRead, TELEGRAM_CHAT_ROOM_ID, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_CHAT_ROOM_ID
+	IniRead, NOTIFICATION_ALL_WHISPERS, %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
+	IniRead, NOTIFICATION_AFK_ONLY, %A_ScriptDir%/config.ini, Config, NOTIFICATION_AFK_ONLY
+}
 
 CheckConfig()
 
@@ -58,8 +61,11 @@ Main()
 {
 	if (!FileExist(GAME_CLIENT_LOG_PATH))
 	{
-		MsgBox, 4144, % NAME, Couldn't find Path of Exile Client Log File:`n%GAME_CLIENT_LOG_PATH%
-		ExitApp
+		MsgBox, 4144, % NAME, Failed to load Path of Exile Client Log File:`n%GAME_CLIENT_LOG_PATH%
+		GAME_CLIENT_LOG_PATH := ""
+		CheckConfig()
+		Main()
+		Return
 	}
 	FileRead, logFileText, % GAME_CLIENT_LOG_PATH
 	RegExReplace(logFileText, "(\R)",, logLastCheckedLine)
@@ -225,51 +231,47 @@ CheckConfig()
 	if (GAME_CLIENT_LOG_PATH == "" || GAME_CLIENT_LOG_PATH == "ERROR")
 	{
 		InputBox, input, % NAME, Set your Path of Exile Client Log File Path, , 460, 160
-		if (ErrorLevel > 0)
+		if (ErrorLevel)
 			ExitApp
-		else
+
+		if (!FileExist(input))
 		{
-			if !FileExist(input)
-			{
-				MsgBox, 4144, % NAME, Couldn't find Path of Exile Client Log File:`n%input%
-				ExitApp
-			}
+			MsgBox, 4144, % NAME, Couldn't find Path of Exile Client Log File:`n%input%
+			CheckConfig()
+			Return
 		}
 		IniWrite, %input%, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
 		GAME_CLIENT_LOG_PATH := input
 	}
 
-	if (GAME_CLIENT_LOG_LIMIT_SIZE == "" || GAME_CLIENT_LOG_LIMIT_SIZE == "ERROR" || GAME_CLIENT_LOG_LIMIT_SIZE < 3072000 || GAME_CLIENT_LOG_LIMIT_SIZE > 3072000000)
+	if (!(GAME_CLIENT_LOG_LIMIT_SIZE is digit) || GAME_CLIENT_LOG_LIMIT_SIZE < 3072000 || GAME_CLIENT_LOG_LIMIT_SIZE > 3072000000)
 	{
 		InputBox, input, % NAME, Set Path of Exile Client Log Max File Size (Kilobyte)`n`nDefault: 5120 (5 MB)`nMin: 3072 (3 MB)`nMax: 30720 (30 MB), , 460, 200
-		if (ErrorLevel > 0)
+		if (ErrorLevel)
 			ExitApp
-		else
+
+		if (!(input is digit) || input < 3072 || input > 30720)
 		{
-			if (input < 3072 || input > 30720)
-			{
-				MsgBox, 4144, % NAME, You have to set value between 3072 ~ 30720 (3 MB ~ 30 MB)
-				CheckConfig()
-				Return
-			}
+			MsgBox, 4144, % NAME, You have to set value between 3072 ~ 30720 (3 MB ~ 30 MB)
+			CheckConfig()
+			Return
 		}
-		IniWrite, % input*1000, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
-		GAME_CLIENT_LOG_LIMIT_SIZE := input*1000
+		input *= 1000
+		IniWrite, % input, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_LIMIT_SIZE
+		GAME_CLIENT_LOG_LIMIT_SIZE := input
 	}
 
-	if (GAME_CLIENT_LOG_BACKUP == "" || GAME_CLIENT_LOG_BACKUP == "ERROR")
+	if (GAME_CLIENT_LOG_BACKUP != 0 && GAME_CLIENT_LOG_BACKUP != 1)
 	{
 		InputBox, input, % NAME, Set Path of Exile Client Log File Backup`n`n1 = Enable (Rename and Backup the log file when limit size reached)`n0 = Disable (Wipe the log file when limit size reached), , 460, 200
-		if (ErrorLevel > 0)
+		if (ErrorLevel)
 			ExitApp
-		else
+
+		if (input != 0 && input != 1)
 		{
-			if (input != 0 && input != 1)
-			{
-				MsgBox, 4144, % NAME, You have to set 0 or 1 for this config
-				CheckConfig()
-				Return
-			}
+			MsgBox, 4144, % NAME, You have to set 0 or 1 for this config
+			CheckConfig()
+			Return
 		}
 		IniWrite, %input%, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_BACKUP
 		GAME_CLIENT_LOG_BACKUP := input
@@ -278,8 +280,9 @@ CheckConfig()
 	if (TELEGRAM_BOT_TOKEN == "" || TELEGRAM_BOT_TOKEN == "ERROR")
 	{
 		InputBox, input, % NAME, Set your Telegram Bot Token, , 460, 160
-		if (ErrorLevel > 0)
+		if (ErrorLevel)
 			ExitApp
+
 		IniWrite, %input%, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_BOT_TOKEN
 		TELEGRAM_BOT_TOKEN := input
 	}
@@ -336,43 +339,40 @@ CheckConfig()
 	if (TELEGRAM_CHAT_ROOM_ID == "" || TELEGRAM_CHAT_ROOM_ID == "ERROR")
 	{
 		InputBox, input, % NAME, Set your Telegram Chat Room ID, , 460, 160
-		if (ErrorLevel > 0)
+		if (ErrorLevel)
 			ExitApp
+
 		IniWrite, %input%, %A_ScriptDir%/config.ini, Telegram, TELEGRAM_CHAT_ROOM_ID
 		TELEGRAM_CHAT_ROOM_ID := input
 	}
 
-	if (NOTIFICATION_ALL_WHISPERS == "" || NOTIFICATION_ALL_WHISPERS == "ERROR")
+	if (NOTIFICATION_ALL_WHISPERS != 0 && NOTIFICATION_ALL_WHISPERS != 1)
 	{
 		InputBox, input, % NAME, Set notification when you recived whispers`n`n1 = All (Send notification all whispers)`n0 = Trade Only (Send notification only trading whispers), , 460, 200
-		if (ErrorLevel > 0)
+		if (ErrorLevel)
 			ExitApp
-		else
+
+		if (input != 0 && input != 1)
 		{
-			if (input != 0 && input != 1)
-			{
-				MsgBox, 4144, % NAME, You have to set 0 or 1 for this config
-				CheckConfig()
-				Return
-			}
+			MsgBox, 4144, % NAME, You have to set 0 or 1 for this config
+			CheckConfig()
+			Return
 		}
 		IniWrite, %input%, %A_ScriptDir%/config.ini, Config, NOTIFICATION_ALL_WHISPERS
 		NOTIFICATION_ALL_WHISPERS := input
 	}
 
-	if (NOTIFICATION_AFK_ONLY == "" || NOTIFICATION_AFK_ONLY == "ERROR")
+	if (NOTIFICATION_AFK_ONLY != 0 && NOTIFICATION_AFK_ONLY !=1)
 	{
 		InputBox, input, % NAME, Set notification when you recived whispers while AFK Mode is ON`n`n1 = Enable`n0 = Disable, , 460, 200
-		if (ErrorLevel > 0)
+		if (ErrorLevel)
 			ExitApp
-		else
+
+		if (input != 0 && input != 1)
 		{
-			if (input != 0 && input != 1)
-			{
-				MsgBox, 4144, % NAME, You have to set 0 or 1 for this config
-				CheckConfig()
-				Return
-			}
+			MsgBox, 4144, % NAME, You have to set 0 or 1 for this config
+			CheckConfig()
+			Return
 		}
 		IniWrite, %input%, %A_ScriptDir%/config.ini, Config, NOTIFICATION_AFK_ONLY
 		NOTIFICATION_AFK_ONLY := input
@@ -389,6 +389,7 @@ CloseApp(ExitReason, ExitCode)
 	if (SendTelegramMessage_CHECK && ExitCode == 0)
 		SendTelegramMessage(NAME . " " . VERSION . " - Stopped")
 
+	TrayTip, % NAME, Stopped, 3, 1
 	ExitApp
 }
 
