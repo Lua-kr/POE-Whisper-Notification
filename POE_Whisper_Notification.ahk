@@ -5,9 +5,10 @@
 SetBatchLines -1
 DetectHiddenWindows, Off
 FileEncoding, UTF-8
+OnExit("CloseApp")
 
 global NAME := "Path of Exile Whisper Notification"
-global VERSION := "v1.2"
+global VERSION := "v1.3"
 
 Menu, Tray, NoStandard
 if ( !A_IsCompiled && FileExist(A_ScriptDir "/icon.ico") )
@@ -140,28 +141,83 @@ LogFileNuke()
 
 SendTelegramMessage(msg)
 {
-	uriMsg := UriEncode(msg)
-	UrlDownloadToFile https://api.telegram.org/bot%TELEGRAM_BOT_TOKEN%/sendmessage?chat_id=%TELEGRAM_CHAT_ROOM_ID%&text=%uriMsg%, _telegram_resp.txt
+	static RetryCount := 0
+	URL := "https://api.telegram.org/bot" . TELEGRAM_BOT_TOKEN . "/sendmessage?"
+	Param := "chat_id=" . TELEGRAM_CHAT_ROOM_ID . "&text=" . UriEncode(msg)
+	WHR := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+	WHR.Open("POST", URL, true)
+    WHR.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
+	WHR.Send(Param)
+	WHR.WaitForResponse()
 
-	FileRead, logFile, %A_ScriptDir%/_telegram_resp.txt
-	if (ErrorLevel == 1)
-	{
-		MsgBox, 4144, % NAME, AHK doesn't work properly...
-		ExitApp
-	}
+	RespCode := WHR.Status
+	if (RespCode == 400 && InStr(WHR.ResponseText, "Too many requests"))
+		RespCode = 999
 
-	FileDelete, %A_ScriptDir%/_telegram_resp.txt
-	if (InStr(logFile, """ok"":false") > 0)
+	switch (RespCode)
 	{
-		MsgBox, 4144, % NAME, Failed to send telegram message, Check telegram configs`n`nBOT TOKEN: %TELEGRAM_BOT_TOKEN%`nCHAT ID: %TELEGRAM_CHAT_ROOM_ID%
-		TELEGRAM_BOT_TOKEN := ""
-		TELEGRAM_CHAT_ROOM_ID := ""
-		CheckConfig()
-		SendTelegramMessage(msg)
-		Return
+		; SUCCESS
+		case 200:
+		{
+			RetryCount := 0
+			SendTelegramMessage_CHECK := true
+			Return
+		}
+
+		; BAD_REQUEST
+		case 400, 401, 403, 404, 406:
+		{
+			RetryCount := 0
+			DescLine := InStr(WHR.ResponseText, "description")+14
+			ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
+
+			if (RespCode == 404)
+			{
+				RespCode := 400
+				ErrorDesc := "Bad request: user not found"
+			}
+			if (RespCode == 400)
+			{
+				if (InStr(ErrorDesc, "chat not found"))
+				{
+					MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`n`nCHAT ROOM ID: %TELEGRAM_CHAT_ROOM_ID%
+					TELEGRAM_CHAT_ROOM_ID := ""
+					CheckConfig()
+					SendTelegramMessage(msg)
+					Return
+				}
+				else if (InStr(ErrorDesc, "Unauthorized") || InStr(ErrorDesc, "user not found"))
+				{
+					MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`n`nBOT TOKEN: %TELEGRAM_BOT_TOKEN%
+					TELEGRAM_BOT_TOKEN := ""
+					CheckConfig()
+					SendTelegramMessage(msg)
+					Return
+				}
+			}
+
+			MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`nExiting the app...
+			ExitApp
+		}
+
+		; OHERS / INTERNAL_SERVER_ERROR
+		default:
+		{
+			RetryCount++
+			DescLine := InStr(WHR.ResponseText, "description")+14
+			ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
+			if (RetryCount >= 30)
+			{
+				MsgBox, 48, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc%`n`nRetry failed over 5 minutes`nExiting the app...
+				ExitApp
+			}
+			if (RetryCount == 1)
+				MsgBox, 48, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc% `n`nRetrying every 10 seconds...
+			Sleep 10000
+			SendTelegramMessage(msg)
+			Return
+		}
 	}
-	logFile := ""
-	SendTelegramMessage_CHECK := true
 }
 
 CheckConfig()
@@ -228,6 +284,55 @@ CheckConfig()
 		TELEGRAM_BOT_TOKEN := input
 	}
 
+	URL := "https://api.telegram.org/bot" . TELEGRAM_BOT_TOKEN . "/getMe"
+	WHR := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+	WHR.Open("POST", URL, true)
+    WHR.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
+	WHR.Send()
+	WHR.WaitForResponse()
+
+	RespCode := WHR.Status
+	if (RespCode == 400 && InStr(WHR.ResponseText, "Too many requests"))
+		RespCode = 999
+
+	switch (RespCode)
+	{
+		; SUCCESS
+		case 200:
+
+		; BAD_REQUEST
+		case 400, 404:
+		{
+			DescLine := InStr(WHR.ResponseText, "description")+14
+			ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
+			if (RespCode == 404)
+			{
+				RespCode := 400
+				ErrorDesc := "Bad request: user not found"
+			}
+			if (InStr(ErrorDesc, "Unauthorized") || InStr(ErrorDesc, "user not found"))
+			{
+				MsgBox, 4144, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc%`n`nBOT TOKEN: %TELEGRAM_BOT_TOKEN%
+				TELEGRAM_BOT_TOKEN := ""
+				CheckConfig()
+			}
+			else
+			{
+				MsgBox, 4144, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc% `n`nExiting the app...
+				ExitApp
+			}
+		}
+
+		; OHERS / INTERNAL_SERVER_ERROR
+		default:
+		{
+			DescLine := InStr(WHR.ResponseText, "description")+14
+			ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
+			MsgBox, 4144, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc% `n`nExiting the app...
+			ExitApp
+		}
+	}
+
 	if (TELEGRAM_CHAT_ROOM_ID == "" || TELEGRAM_CHAT_ROOM_ID == "ERROR")
 	{
 		InputBox, input, % NAME, Set your Telegram Chat Room ID, , 460, 160
@@ -281,7 +386,7 @@ About()
 
 CloseApp(ExitReason, ExitCode)
 {
-	if (SendTelegramMessage_CHECK)
+	if (SendTelegramMessage_CHECK && ExitCode == 0)
 		SendTelegramMessage(NAME . " " . VERSION . " - Stopped")
 
 	ExitApp
@@ -322,7 +427,7 @@ StrPutVar(Str, ByRef Var, Enc = "")
 IsTradingWhisper(str)
 {
 	; Make sure it doesnt contain line break
-	if (InStr(str, "`n") > 0)
+	if (InStr(str, "`n"))
 		Return False
 
 	allTradingRegEx := { "currencyPoeTrade": "(.*)Hi, I'd like to buy your (.*) for my (.*) in (.*)"
