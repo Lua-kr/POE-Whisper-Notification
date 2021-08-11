@@ -8,7 +8,7 @@ FileEncoding, UTF-8
 OnExit("CloseApp")
 
 global NAME := "Path of Exile Whisper Notification"
-global VERSION := "v1.3b"
+global VERSION := "v1.3c"
 
 Menu, Tray, NoStandard
 if ( !A_IsCompiled && FileExist(A_ScriptDir "/icon.ico") )
@@ -158,75 +158,85 @@ SendTelegramMessage(msg)
 	WHR.Open("POST", URL, true)
     WHR.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded")
 	WHR.Send(Param)
-	WHR.WaitForResponse()
+	WHR.WaitForResponse(30)
 
-	RespCode := WHR.Status
-	if (RespCode == 400 && InStr(WHR.ResponseText, "Too many requests"))
-		RespCode = 999
-
-	switch (RespCode)
+	try
 	{
-		; SUCCESS
-		case 200:
-		{
-			RetryCount := 0
-			SendTelegramMessage_CHECK := true
-			Return
-		}
+		RespCode := WHR.Status
+		if (RespCode == 400 && InStr(WHR.ResponseText, "Too many requests"))
+			RespCode = 999
 
-		; BAD_REQUEST
-		case 400, 401, 403, 404, 406:
+		switch (RespCode)
 		{
-			RetryCount := 0
-			DescLine := InStr(WHR.ResponseText, "description")+14
-			ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
-
-			if (RespCode == 404)
+			; SUCCESS
+			case 200:
 			{
-				RespCode := 400
-				ErrorDesc := "Bad request: user not found"
-			}
-			if (RespCode == 400)
-			{
-				if (InStr(ErrorDesc, "chat not found"))
-				{
-					MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`n`nCHAT ROOM ID: %TELEGRAM_CHAT_ROOM_ID%
-					TELEGRAM_CHAT_ROOM_ID := ""
-					CheckConfig()
-					SendTelegramMessage(msg)
-					Return
-				}
-				else if (InStr(ErrorDesc, "Unauthorized") || InStr(ErrorDesc, "user not found"))
-				{
-					MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`n`nBOT TOKEN: %TELEGRAM_BOT_TOKEN%
-					TELEGRAM_BOT_TOKEN := ""
-					CheckConfig()
-					SendTelegramMessage(msg)
-					Return
-				}
+				RetryCount := 0
+				SendTelegramMessage_CHECK := true
+				Return
 			}
 
-			MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`nExiting the app...
-			ExitApp
-		}
-
-		; OHERS / INTERNAL_SERVER_ERROR
-		default:
-		{
-			RetryCount++
-			DescLine := InStr(WHR.ResponseText, "description")+14
-			ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
-			if (RetryCount >= 30)
+			; BAD_REQUEST
+			case 400, 401, 403, 404, 406:
 			{
-				MsgBox, 48, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc%`n`nRetry failed over 5 minutes`nExiting the app...
+				RetryCount := 0
+				DescLine := InStr(WHR.ResponseText, "description")+14
+				ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
+
+				if (RespCode == 404)
+				{
+					RespCode := 400
+					ErrorDesc := "Bad request: user not found"
+				}
+				if (RespCode == 400)
+				{
+					if (InStr(ErrorDesc, "chat not found"))
+					{
+						MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`n`nCHAT ROOM ID: %TELEGRAM_CHAT_ROOM_ID%
+						TELEGRAM_CHAT_ROOM_ID := ""
+						CheckConfig()
+						SendTelegramMessage(msg)
+						Return
+					}
+					else if (InStr(ErrorDesc, "Unauthorized") || InStr(ErrorDesc, "user not found"))
+					{
+						MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`n`nBOT TOKEN: %TELEGRAM_BOT_TOKEN%
+						TELEGRAM_BOT_TOKEN := ""
+						CheckConfig()
+						SendTelegramMessage(msg)
+						Return
+					}
+				}
+
+				MsgBox, 48, % NAME, Failed to send Telegram message`n(Code: %RespCode%) %ErrorDesc%`nExiting the app...
 				ExitApp
 			}
-			if (RetryCount == 1)
-				MsgBox, 48, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc% `n`nRetrying every 10 seconds...
-			Sleep 10000
-			SendTelegramMessage(msg)
-			Return
+
+			; OHERS / INTERNAL_SERVER_ERROR
+			default:
+			{
+				RetryCount++
+				DescLine := InStr(WHR.ResponseText, "description")+14
+				ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
+				if (RetryCount >= 30)
+				{
+					MsgBox, 48, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc%`n`nRetry failed over 5 minutes`nExiting the app...
+					ExitApp
+				}
+				else if (RetryCount == 1)
+					MsgBox, 48, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc%`n`nRetrying every 10 seconds...
+
+				Sleep 10000
+				SendTelegramMessage(msg)
+				Return
+			}
 		}
+	}
+	catch e
+	{
+		errorMsg := e.Message
+		MsgBox, 48, % NAME, Failed to connect Telegram API`n%errorMsg%`n`nExiting the app...
+		ExitApp
 	}
 }
 
