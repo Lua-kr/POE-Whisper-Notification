@@ -8,7 +8,7 @@ FileEncoding, UTF-8
 OnExit("CloseApp")
 
 global NAME := "Path of Exile Whisper Notification"
-global VERSION := "v1.3c"
+global VERSION := "v1.4"
 
 Menu, Tray, NoStandard
 if ( !A_IsCompiled && FileExist(A_ScriptDir "/icon.ico") )
@@ -59,9 +59,9 @@ Main()
 
 Main()
 {
-	if (!FileExist(GAME_CLIENT_LOG_PATH))
+	if (!FileExist(GAME_CLIENT_LOG_PATH) || !InStr(GAME_CLIENT_LOG_PATH, "Client.txt"))
 	{
-		MsgBox, 4144, % NAME, Failed to load Path of Exile Client Log File:`n%GAME_CLIENT_LOG_PATH%
+		MsgBox, 4144, % NAME, Bad Path of Exile Client Log File:`n%GAME_CLIENT_LOG_PATH%
 		GAME_CLIENT_LOG_PATH := ""
 		CheckConfig()
 		Main()
@@ -212,7 +212,7 @@ SendTelegramMessage(msg)
 				ExitApp
 			}
 
-			; OHERS / INTERNAL_SERVER_ERROR
+			; OTHERS / INTERNAL_SERVER_ERROR
 			default:
 			{
 				RetryCount++
@@ -248,12 +248,13 @@ CheckConfig()
 		if (ErrorLevel)
 			ExitApp
 
-		if (!FileExist(input))
+		if (!FileExist(input) || !InStr(GAME_CLIENT_LOG_PATH, "Client.txt"))
 		{
-			MsgBox, 4144, % NAME, Couldn't find Path of Exile Client Log File:`n%input%
+			MsgBox, 4144, % NAME, Selected Wrong Path of Exile Client Log File:`n%input%`n`nExample)`nC:/Path Of Exile/logs/Client.txt`nC:/Daum Games/Path of Exile/logs/KakaoClient.txt
 			CheckConfig()
 			Return
 		}
+
 		IniWrite, %input%, %A_ScriptDir%/config.ini, PathOfExile, GAME_CLIENT_LOG_PATH
 		GAME_CLIENT_LOG_PATH := input
 	}
@@ -340,7 +341,7 @@ CheckConfig()
 			}
 		}
 
-		; OHERS / INTERNAL_SERVER_ERROR
+		; OTHERS / INTERNAL_SERVER_ERROR
 		default:
 		{
 			DescLine := InStr(WHR.ResponseText, "description")+14
