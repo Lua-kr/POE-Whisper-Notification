@@ -53,7 +53,7 @@ CheckConfig()
 
 global logLastCheckedLine := 0
 global isPlayerAFK := false
-global SendTelegramMessage_CHECK := false
+global sendTelegramMessage_Check := false
 
 Main()
 
@@ -151,7 +151,7 @@ LogFileNuke()
 
 SendTelegramMessage(msg)
 {
-	static RetryCount := 0
+	static retryCount := 0
 	URL := "https://api.telegram.org/bot" . TELEGRAM_BOT_TOKEN . "/sendmessage?"
 	Param := "chat_id=" . TELEGRAM_CHAT_ROOM_ID . "&text=" . UriEncode(msg)
 	WHR := ComObjCreate("WinHttp.WinHttpRequest.5.1")
@@ -171,15 +171,15 @@ SendTelegramMessage(msg)
 			; SUCCESS
 			case 200:
 			{
-				RetryCount := 0
-				SendTelegramMessage_CHECK := true
+				retryCount := 0
+				sendTelegramMessage_Check := true
 				Return
 			}
 
 			; BAD_REQUEST
 			case 400, 401, 403, 404, 406:
 			{
-				RetryCount := 0
+				retryCount := 0
 				DescLine := InStr(WHR.ResponseText, "description")+14
 				ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
 
@@ -215,15 +215,15 @@ SendTelegramMessage(msg)
 			; OTHERS / INTERNAL_SERVER_ERROR
 			default:
 			{
-				RetryCount++
+				retryCount++
 				DescLine := InStr(WHR.ResponseText, "description")+14
 				ErrorDesc := SubStr(WHR.ResponseText, DescLine, -2)
-				if (RetryCount >= 30)
+				if (retryCount >= 30)
 				{
 					MsgBox, 48, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc%`n`nRetry failed over 5 minutes`nExiting the app...
 					ExitApp
 				}
-				else if (RetryCount == 1)
+				else if (retryCount == 1)
 					MsgBox, 48, % NAME, Failed to connect Telegram API`n(Code: %RespCode%) %ErrorDesc%`n`nRetrying every 10 seconds...
 
 				Sleep 10000
@@ -248,7 +248,7 @@ CheckConfig()
 		if (ErrorLevel)
 			ExitApp
 
-		if (!FileExist(input) || !InStr(GAME_CLIENT_LOG_PATH, "Client.txt"))
+		if (!FileExist(input) || !InStr(input, "Client.txt"))
 		{
 			MsgBox, 4144, % NAME, Selected Wrong Path of Exile Client Log File:`n%input%`n`nExample)`nC:/Path Of Exile/logs/Client.txt`nC:/Daum Games/Path of Exile/logs/KakaoClient.txt
 			CheckConfig()
@@ -401,7 +401,7 @@ About()
 
 CloseApp(ExitReason, ExitCode)
 {
-	if (SendTelegramMessage_CHECK && ExitCode == 0)
+	if (sendTelegramMessage_Check && ExitCode == 0)
 		SendTelegramMessage(NAME . " " . VERSION . " - Stopped")
 
 	TrayTip, % NAME, Stopped, 3, 1
